@@ -75,6 +75,7 @@ public:
 
 	void paste(copyBuffer&);
 	void draw(olc::PixelGameEngine* pge, copyBuffer& cb);
+	void minimap(olc::PixelGameEngine* pge, int xo, int yo);
 
 	bool getOpaquePaste() {
 		return _opaquePaste;

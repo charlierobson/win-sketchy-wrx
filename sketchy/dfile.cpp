@@ -78,6 +78,21 @@ void dfile::draw(olc::PixelGameEngine* pge) {
         pge->DrawRect(4, 4, (((w-1) / 8) + 1) * 8 * 4, h * 4, olc::GREY);
 }
 
+
+void dfile::minimap(olc::PixelGameEngine* pge, int xo, int yo) {
+
+    pge->FillRect(xo, yo, _w, _h, olc::WHITE);
+
+    for (int y = 0; y < _h; ++y) {
+        for (int x = 0; x < _w; ++x) {
+            if (_dfile[x + _w * y] != 0) {
+                pge->Draw(x + xo , y + yo, olc::BLACK);
+            }
+        }
+    }
+}
+
+
 void dfile::plot(int x, int y) {
     _dfile[x + _w * y] = 1;
 }

@@ -179,6 +179,8 @@ public:
 		_regions.push_back(new dfileRegion(this));
 
 		auto row = 8;
+		auto rowSpacing = 11;
+
 		int basex = (pw * 4) + 8;
 
 		auto workButtons = new buttonRegion();
@@ -187,15 +189,15 @@ public:
 		workButtons->add(blockButton);
 		workButtons->select(blockButton);
 
-		auto selectButton = new textButton(basex, row += 12, _dfile, "SELECT", [this]() {setMode(2); });
+		auto selectButton = new textButton(basex, row += rowSpacing, _dfile, "SELECT", [this]() {setMode(2); });
 		workButtons->add(selectButton);
 		_clickables["select"] = std::pair<buttonRegion*, button*>(workButtons, selectButton);
 
-		workButtons->add(new textButton(basex, row += 12, _dfile, "COPY", [this]() {
+		workButtons->add(new textButton(basex, row += rowSpacing, _dfile, "COPY", [this]() {
 			DoCopy();
 			}, false));
 
-		auto pasteButton = new textButton(basex, row += 12, _dfile, "PASTE", [this]() {
+		auto pasteButton = new textButton(basex, row += rowSpacing, _dfile, "PASTE", [this]() {
 			if (getMode() == 5) {
 				getDFile()->setOpaquePaste(!getDFile()->getOpaquePaste());
 			}
@@ -207,43 +209,43 @@ public:
 		workButtons->add(pasteButton);
 		_clickables["paste"] = std::pair<buttonRegion*, button*>(workButtons, pasteButton);
 
-		row += 12;
+		row += rowSpacing / 2;
 
-		workButtons->add(new textButton(basex, row += 12, _dfile, "CLS", [this]() {
+		workButtons->add(new textButton(basex, row += rowSpacing, _dfile, "CLS", [this]() {
 				_dfile->cls();
 			}, false));
 
-		workButtons->add(new textButton(basex, row += 12, _dfile, "INVERT", [this]() {
+		workButtons->add(new textButton(basex, row += rowSpacing, _dfile, "INVERT", [this]() {
 			_dfile->invert();
 			}, false));
 
-		workButtons->add(new textButton(basex, row += 12, _dfile, "FILL", [this]() {
+		workButtons->add(new textButton(basex, row += rowSpacing, _dfile, "FILL", [this]() {
 			_dfile->fill(1);
 			}, false));
 
-		workButtons->add(new textButton(basex, row += 12, _dfile, "UNFILL", [this]() {
+		workButtons->add(new textButton(basex, row += rowSpacing, _dfile, "UNFILL", [this]() {
 			_dfile->fill(0);
 			}, false));
 
-		workButtons->add(new textButton(basex, row += 12, _dfile, "ROTATE", [this]() {
+		workButtons->add(new textButton(basex, row += rowSpacing, _dfile, "ROTATE", [this]() {
 			rotateCopyBuffer();
 			}, false));
 
-		row += 12;
+		row += rowSpacing / 2;
 
-		workButtons->add(new textButton(basex, row += 12, _dfile, "->CLIP", [this]() {
+		workButtons->add(new textButton(basex, row += rowSpacing, _dfile, "->CLIP", [this]() {
 			int w, h;
 			_dfile->getSpriteExtent(w, h);
 			SaveToClipboard(_dfile->serialise());
 			}, false));
 
-		workButtons->add(new textButton(basex, row += 12, _dfile, "<-CLIP", [this]() {
+		workButtons->add(new textButton(basex, row += rowSpacing, _dfile, "<-CLIP", [this]() {
 			_dfile->deserialise(GetFromClipboard());
 			}, false));
 
-		row += 12;
+		row += rowSpacing / 2;
 
-		workButtons->add(new textButton(basex, row += 12, _dfile, "LOAD", [this]() {
+		workButtons->add(new textButton(basex, row += rowSpacing, _dfile, "LOAD", [this]() {
 			DoFileOp([this](LPOPENFILENAMEA ofn) {
 				if (GetOpenFileNameA(ofn)) {
 					_dfile->load(ofn->lpstrFile);
@@ -251,7 +253,7 @@ public:
 				});
 			}, false));
 
-		workButtons->add(new textButton(basex, row += 12, _dfile, "SAVE", [this]() {
+		workButtons->add(new textButton(basex, row += rowSpacing, _dfile, "SAVE", [this]() {
 			DoFileOp([this](LPOPENFILENAMEA ofn) {
 				if (GetSaveFileNameA(ofn)) {
 					_dfile->save(ofn->lpstrFile);
@@ -261,7 +263,7 @@ public:
 
 		_regions.push_back(workButtons);
 
-		row += 24;
+		row += rowSpacing * 3 / 2;
 
 		auto pageButtons = new buttonRegion();
 		for (int i = 0; i < 4; ++i) {
@@ -317,6 +319,8 @@ public:
 			}
 			region->draw(this);
 		}
+
+		_dfile->minimap(this, _dfile->getW() * 4 + 8, 196);
 
 		return true;
 	}
