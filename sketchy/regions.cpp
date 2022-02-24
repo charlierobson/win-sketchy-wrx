@@ -6,10 +6,7 @@
 #include "dfile.h"
 
 buttonRegion::buttonRegion() {
-	_topLeft.x = 2000;
-	_topLeft.y = 2000;
-	_bottomRight.x = 0;
-	_bottomRight.y = 0;
+	region();
 	_currentSelection = nullptr;
 }
 
@@ -54,9 +51,8 @@ void buttonRegion::onMouseLeave() {
 
 
 dfileRegion::dfileRegion(sketchyIf* core) :
-	_core(core)
-{
-	extend(olc::vi2d(0 + 4, 0 + 4), olc::vi2d(256 + 4, 192 + 4));
+	region(4, 4, core->getDFile()->getW() * 4 + 4, core->getDFile()->getH() * 4 + 4),
+	_core(core) {
 }
 
 void dfileRegion::update(olc::PixelGameEngine* pge) {
@@ -68,14 +64,6 @@ void dfileRegion::update(olc::PixelGameEngine* pge) {
 	static olc::vi2d startPos, endPos;
 
 	switch (_core->getMode()) {
-	case 0:
-		if (lButton.bHeld) {
-			_core->getDFile()->poke(mousePos.x / 8, mousePos.y / 8, _core->getCurChar());
-		}
-		else if (rButton.bHeld) {
-			_core->getDFile()->poke(mousePos.x / 8, mousePos.y / 8, 0);
-		}
-		break;
 	case 1:
 	{
 		auto subPixelX = mousePos.x / 4;
@@ -91,20 +79,12 @@ void dfileRegion::update(olc::PixelGameEngine* pge) {
 	case 2:
 	{
 		if (lButton.bPressed) {
-			_core->getDFile()->setSelectRect(mousePos / 8, mousePos / 8);
+			_core->getDFile()->setSelectRect(mousePos / 4, mousePos / 4);
 		}
 		else if (lButton.bHeld) {
 			olc::vi2d tl, br;
 			_core->getDFile()->getSelectRect(tl, br);
-			_core->getDFile()->setSelectRect(tl, mousePos / 8);
-		}
-	}
-	break;
-	case 3:
-	case 4:
-	{
-		if (lButton.bHeld) {
-			_core->getDFile()->setSelectRect(mousePos / 8, mousePos / 8);
+			_core->getDFile()->setSelectRect(tl, mousePos / 4);
 		}
 	}
 	break;
@@ -112,10 +92,10 @@ void dfileRegion::update(olc::PixelGameEngine* pge) {
 	case 5:
 	{
 		if (lButton.bPressed) {
-			startPos = mousePos / 8;
+			startPos = mousePos / 4;
 		}
 		if (lButton.bHeld) {
-			endPos = mousePos / 8;
+			endPos = mousePos / 4;
 			_core->getCopyBuffer().pos += endPos - startPos;
 			startPos = endPos;
 		}
@@ -142,7 +122,7 @@ void dfileRegion::draw(olc::PixelGameEngine* pge) {
 		olc::vi2d start, end;
 		_core->getDFile()->getSelectRectNormal(start, end);
 		auto dim = olc::vi2d(end.x - start.x + 1, end.y - start.y + 1);
-		pge->DrawRect(start * 8 + offs, dim * 8, _core->getSelectColour());
+		pge->DrawRect(start * 4 + offs, dim * 4, _core->getSelectColour());
 	}
 }
 

@@ -6,7 +6,10 @@
 #include "regions.h"
 #include "dfile.h"
 
-#include "3dm.h"
+#include "sinv.h"
+
+static const int pw = 32;
+static const int ph = 64;
 
 class sketchy : public olc::PixelGameEngine, sketchyIf
 {
@@ -37,8 +40,9 @@ private:
 
 		ofn.lStructSize = sizeof(ofn);
 		ofn.hwndOwner = nullptr;
-		ofn.lpstrFilter = "Text Files (*.txt, *.asm)\0*.txt;*.asm\0Binary D-Files (*.dfile)\0*.dfile\0Raw Files (*.raw, *.bin)\0*.raw;*.bin\0Any File\0*.*\0";
+		ofn.lpstrFilter = "Sketchy Sprite Files (*.ssf)\0*.ssf\0Any File\0*.*\0";
 		ofn.lpstrFile = filename;
+		ofn.lpstrDefExt = "ssf";
 		ofn.nMaxFile = MAX_PATH;
 		ofn.lpstrTitle = "S81ect a File";
 		ofn.Flags = OFN_DONTADDTORECENT;
@@ -53,7 +57,7 @@ private:
 public:
 	sketchy()
 	{
-		sAppName = "Sketchy ZX81 screen editor V1.4";
+		sAppName = "Even Sketchier ZX81 wrx editor V1.0";
 	}
 
 	void setMode(int mode) {
@@ -92,6 +96,54 @@ public:
 	}
 
 
+	void SaveToClipboard(std::string content) {
+		if (!OpenClipboard(reinterpret_cast<olc::Platform_Windows*>(olc::platform.get())->olc_hWnd))
+			return;
+
+		EmptyClipboard();
+
+		auto data = GlobalAlloc(GMEM_MOVEABLE, content.size() + 1);
+		if (data == nullptr)
+			return;
+
+		auto locked = GlobalLock(data);
+		if (locked == nullptr) {
+			GlobalFree(data);
+			return;
+		}
+
+		memset(locked, 0, content.size() + 1);
+		memcpy(locked, content.c_str(), content.size());
+		GlobalUnlock(data);
+
+		SetClipboardData(CF_TEXT, data);
+		CloseClipboard();
+	}
+
+	std::string GetFromClipboard() {
+		std::string result("");
+
+		if (!IsClipboardFormatAvailable(CF_TEXT))
+			return result;
+
+		if (!OpenClipboard(reinterpret_cast<olc::Platform_Windows*>(olc::platform.get())->olc_hWnd))
+			return result;
+
+		auto clip = GetClipboardData(CF_TEXT);
+		if (clip != NULL) {
+			auto lptstr = GlobalLock(clip);
+			if (lptstr != NULL)
+			{
+				result.assign((const char*)lptstr);
+				GlobalUnlock(clip);
+			}
+		}
+
+		CloseClipboard();
+
+		return result;
+	}
+
 public:
 	void OnDropFile(const std::string& filename) override
 	{
@@ -103,31 +155,24 @@ public:
 		auto sprite = new olc::Sprite("zx81font.png");
 
 		for (int i = 0; i < 4; ++i) {
-			_dfiles.push_back(new dfile(sprite));
+			_dfiles.push_back(new dfile(sprite, pw, ph));
 		}
 
 		_dfile = _dfiles[0];
 
-		int basex = 32 * 8 + 16;
+		int basex = (pw * 4) + 8;
 
 		auto modeButtons = new buttonRegion();
-		auto charButton = new textButton(basex, 192 - 20, _dfile, "CHAR", [this]() {setMode(0); });
-		modeButtons->add(charButton);
-		_clickables["char"] = std::pair<buttonRegion*, button*>(modeButtons, charButton);
-		modeButtons->select(charButton);
-		modeButtons->add(new textButton(basex + 40, 192 - 20, _dfile, "BLOCK", [this]() {setMode(1); }));
-		auto selectButton = new textButton(basex, 192 - 8, _dfile, "SELECT", [this]() {setMode(2); });
+
+		auto blockButton = new textButton(basex, 8, _dfile, "DRAW", [this]() {setMode(1); });
+		modeButtons->add(blockButton);
+		modeButtons->select(blockButton);
+
+		auto selectButton = new textButton(basex, 8 + 12, _dfile, "SELECT", [this]() {setMode(2); });
 		modeButtons->add(selectButton);
 		_clickables["select"] = std::pair<buttonRegion*, button*>(modeButtons, selectButton);
-		modeButtons->add(new lgModeButton(basex + 56, 192 - 8, _dfile, 0xB1, [this](int c)
-			{
-				setMode(c == 0xB1 ? 3 : 4);
-				olc::vi2d tl, br;
-				_dfile->getSelectRect(tl, br);
-				_dfile->setSelectRect(tl, tl);
-			}));
 
-		auto pasteButton = new textButton(basex, 192 + 4, _dfile, "PASTE", [this]() {
+		auto pasteButton = new textButton(basex, 8 + 24, _dfile, "PASTE", [this]() {
 			if (getMode() == 5) {
 				getDFile()->setOpaquePaste(!getDFile()->getOpaquePaste());
 			}
@@ -141,49 +186,42 @@ public:
 
 		_regions.push_back(modeButtons);
 
-		auto characterButtons = new buttonRegion();
-		for (int i = 0; i < 128; ++i) {
-			int dx = (i & 7) * 10;
-			int dy = (i / 8) * 10;
-
-			auto b = new charsetButton(basex + dx, 8 + dy, _dfile, i,
-				[this](int c) {
-					if (getMode() == 1) {
-						ClickButton("char");
-					}
-					setCurChar(c >= 0x40 ? c + 64 : c);
-				});
-
-			characterButtons->add(b);
-
-			if (i == 64) {
-				characterButtons->select(b);
-			}
-		}
-		_regions.push_back(characterButtons);
-
 		_regions.push_back(new dfileRegion(this));
 
 		auto workButtons = new buttonRegion();
-		workButtons->add(new textButton(8, 204, _dfile, "CLS", [this]() {
+		workButtons->add(new textButton(basex, 8 + 48, _dfile, "CLS", [this]() {
 				_dfile->cls();
 			}, false));
 
-		workButtons->add(new textButton(8 + 4 * 8, 204, _dfile, "FILL", [this]() {
-			_dfile->fill(getCurChar());
-			}, false));
-
-		workButtons->add(new textButton(8 + 9 * 8, 204, _dfile, "INVERT", [this]() {
+		workButtons->add(new textButton(basex, 8 + 60, _dfile, "INVERT", [this]() {
 			_dfile->invert();
 			}, false));
 
-		workButtons->add(new textButton(8 + 16 * 8, 204, _dfile, "COPY", [this]() {
-				DoCopy();
+		workButtons->add(new textButton(basex, 8 + 72, _dfile, "FILL", [this]() {
+			_dfile->fill(1);
+			}, false));
+
+		workButtons->add(new textButton(basex, 8 + 84, _dfile, "UNFILL", [this]() {
+			_dfile->fill(0);
+			}, false));
+
+		workButtons->add(new textButton(basex, 8 + 96, _dfile, "COPY", [this]() {
+			DoCopy();
+			}, false));
+
+		workButtons->add(new textButton(basex, 8 + 108, _dfile, "->CLIP", [this]() {
+			int w, h;
+			_dfile->getSpriteExtent(w, h);
+			SaveToClipboard(_dfile->serialise());
+			}, false));
+
+		workButtons->add(new textButton(basex, 8 + 120, _dfile, "<-CLIP", [this]() {
+			_dfile->deserialise(GetFromClipboard());
 			}, false));
 
 		_regions.push_back(workButtons);
 
-		workButtons->add(new textButton(8, 220, _dfile, "LOAD", [this]() {
+		workButtons->add(new textButton(basex, 8 + 144, _dfile, "LOAD", [this]() {
 			DoFileOp([this](LPOPENFILENAMEA ofn) {
 				if (GetOpenFileNameA(ofn)) {
 					_dfile->load(ofn->lpstrFile);
@@ -191,7 +229,7 @@ public:
 				});
 			}, false));
 
-		workButtons->add(new textButton(8 + 5 * 8, 220, _dfile, "SAVE", [this]() {
+		workButtons->add(new textButton(basex, 8 + 156, _dfile, "SAVE", [this]() {
 			DoFileOp([this](LPOPENFILENAMEA ofn) {
 				if (GetSaveFileNameA(ofn)) {
 					_dfile->save(ofn->lpstrFile);
@@ -202,7 +240,7 @@ public:
 
 		auto pageButtons = new buttonRegion();
 		for (int i = 0; i < 4; ++i) {
-			auto b = new pageButton(8 + (21 + i) * 10, 204, _dfile, 0x1d + i,
+			auto b = new pageButton(basex + i * 10, 8 + 180, _dfile, 0x1d + i,
 				[this](int c) {
 					setPage(c - 0x1d);
 				},
@@ -220,8 +258,8 @@ public:
 
 		_copyBuffer.pos = olc::vi2d(0, 0);
 		_copyBuffer.w = 32;
-		_copyBuffer.h = 24;
-		_copyBuffer.data.assign(std::begin(threedeeemem), std::end(threedeeemem));
+		_copyBuffer.h = 64;
+		_copyBuffer.data.assign(std::begin(sinv), std::end(sinv));
 
 		return true;
 	}
@@ -243,12 +281,6 @@ public:
 		olc::HWButton lButton = GetMouse(0);
 		olc::HWButton rButton = GetMouse(1);
 
-		if (GetKey(olc::Key::UP).bPressed) _dfile->cursorUp();
-		if (GetKey(olc::Key::DOWN).bPressed) _dfile->cursorDown();
-		if (GetKey(olc::Key::LEFT).bPressed) _dfile->cursorLeft();
-		if (GetKey(olc::Key::RIGHT).bPressed) _dfile->cursorRight();
-		if (GetKey(olc::Key::INS).bPressed) _dfile->insert(getMode() == 4);
-		if (GetKey(olc::Key::DEL).bPressed) _dfile->del(getMode() == 4);
 		if (GetKey(olc::Key::F1).bPressed) setPage(0);
 		if (GetKey(olc::Key::F2).bPressed) setPage(1);
 		if (GetKey(olc::Key::F3).bPressed) setPage(2);
@@ -263,23 +295,13 @@ public:
 
 		return true;
 	}
-
-	void OnKeyDown(int key) override
-	{
- 		if (getMode() == 3) {
-			_dfile->rst8a(key);
-		}
-		else if (getMode() == 4) {
-			_dfile->rst88a(key);
-		}
-	}
 };
 
 
 int main()
 {
 	sketchy demo;
-	if (demo.Construct(364, 236, 2, 2))
+	if (demo.Construct(pw * 4 + 8 * 8, 8 + ph * 4, 2, 2))
 		demo.Start();
 
 	return 0;

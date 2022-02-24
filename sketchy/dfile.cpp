@@ -3,17 +3,24 @@
 #include <regex>
 #include <iomanip>
 
-dfile::dfile(olc::Sprite* charSet) :
+dfile::dfile(olc::Sprite* charSet, int w, int h) :
     _charSet(charSet)
 {
-    _dfile.resize(32 * 24);
+    _w = w;
+    _h = h;
+
+    _dfile.resize(_w * _h);
     _selStart = olc::vi2d(0, 0);
-    _selEnd = olc::vi2d(31, 23);
+    _selEnd = olc::vi2d(_w - 1, _h - 1);
     _opaquePaste = true;
 }
 
+dfile::dfile(const dfile& other) {
+}
+
+
 int dfile::ascii2zeddy(int c) {
-    const char* zeddycs = " !!!!!!!!!!\"\xa3$:?()><=+-*/;,.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"; 
+    const char* zeddycs = " !!!!!!!!!!\"\xa3$:?()><=+-*/;,.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     auto idx = strrchr(zeddycs, toupper(c));
     if (idx == nullptr || *idx == '!') {
         return -1;
@@ -21,70 +28,62 @@ int dfile::ascii2zeddy(int c) {
     return idx - zeddycs;
 }
 
+void getFirstAndLast(std::vector<int> dfile, int y, int w, int& f, int& l) {
+    f = w + 1;
+    l = -1;
+    for (int x = 0; x < w; ++x) {
+        if (dfile[x + y * w]) {
+            f = x;
+            l = x;
+            break;
+        }
+    }
+    for (int x = w - 1; x >= 0; --x) {
+        if (dfile[x + y * w]) {
+            l = x;
+            break;
+        }
+    }
+}
+
+
 void dfile::draw(olc::PixelGameEngine* pge) {
     int xo = 4;
     int yo = 4;
 
-	for (int x = 0; x < 32; x++)
-		for (int y = 0; y < 24; y++) {
-            auto c = _dfile[x + 32 * y];
-            if (c >= 128) {
-                c -= 64;
+    auto lcol = olc::Pixel(0xFFF0F0F0);
+
+    for (int y = 0; y < _h; ++y) {
+        for (int x = 0; x < _w; ++x) {
+            //int f, l;
+            //getFirstAndLast(_dfile, y, _w, f, l);
+
+            auto xc = x / 8;
+            auto yc = y / 8;
+            auto dcol = (xc & 1) ^ (yc & 1) ? olc::Pixel(0xFFD0D0D0) : olc::Pixel(0xFFE0E0E0);
+            if (_dfile[x + _w * y] == 0) {
+                //if (x >= f && x <= l)
+                //    pge->FillRect(x * 4 + xo, y * 4 + yo, 4, 4, olc::WHITE);
+                //else 
+                    pge->FillRect(x * 4 + xo, y * 4 + yo, 4, 4, (x & 1) ^ (y & 1) ? lcol : dcol);
             }
-			if (c == 0)
-				pge->FillRect(x * 8 + xo, y * 8 + yo, 8, 8, (x & 1) ^ (y & 1) ? olc::Pixel(0xFFF0F0F0) : olc::Pixel(0xFFE0E0E0));
-			else
-				pge->DrawPartialSprite(x * 8 + xo, y * 8 + yo, _charSet, 0, c * 8, 8, 8);
-		}
-}
-
-void dfile::poke(int x, int y, int c) {
-	_dfile[x + 32 * y] = c;
-}
-
-int dfile::peek(int x, int y) {
-	return _dfile[x + 32 * y];
-}
-
-void dfile::doPlot(int x, int y, int mode) {
-    auto b = (y & 1) == 0 ? 1 : 4;
-    if ((x & 1) != 0) {
-        b *= 2;
+            else
+                pge->FillRect(x * 4 + xo, y * 4 + yo, 4, 4, olc::BLACK);
+        }
     }
 
-    auto i = x / 2 + y / 2 * 32;
-    auto c = _dfile[i];
-
-    if ((c & 127) > 7) {
-        c = 0;
-    }
-    if (c > 127) {
-        c ^= 0x8f;
-    }
-
-    if (mode == 0) {
-        c = ~b & c;
-    }
-    else if (mode == 1) {
-        c |= b;
-    }
-    else {
-        c = c ^ b;
-    }
-
-    if (c > 7) {
-        c ^= 0x8f;
-    }
-
-    _dfile[i] = c;
-}
-
-void dfile::unplot(int x, int y) {
-    doPlot(x, y, 0);
+    int w, h;
+    getSpriteExtent(w, h);
+    if (w + h != 0)
+        pge->DrawRect(4, 4, (((w-1) / 8) + 1) * 8 * 4, h * 4, olc::GREY);
 }
 
 void dfile::plot(int x, int y) {
-    doPlot(x, y, 1);
+    _dfile[x + _w * y] = 1;
+}
+
+void dfile::unplot(int x, int y) {
+    _dfile[x + _w * y] = 0;
 }
 
 void dfile::cls() {
@@ -99,7 +98,7 @@ void dfile::fill(int c) {
 
     for (int row = start.y; row <= end.y; ++row) {
         for (int x = start.x; x <= end.x; ++x) {
-            _dfile[row * 32 + x] = c;
+            _dfile[row * _w + x] = c;
         }
     }
 }
@@ -107,43 +106,20 @@ void dfile::fill(int c) {
 
 void dfile::load(const std::string& filename) {
 
-    auto n = 0;
-    std::string end = filename.substr(filename.rfind("."));
+    byte w, h, m;
+    int n = 0;
 
-    // bin, raw are dumps of the dfile without newlines.
-    // dfile is the whole dfile including newlines.
-    // because we just filter out newlines here we can treat them all equally
-    //
-    if (end == ".bin" || end == ".raw" || end == ".dfile") {
-        std::ifstream binFile(filename, std::ios::binary);
-        if (binFile.is_open()) {
+    std::ifstream sprbin(filename, std::ios::binary);
+    sprbin >> std::noskipws;
 
-            unsigned char m;
-            while (!binFile.eof()) {
-                binFile.read((char*)&m, 1);
-                if (m != 0x76 && n < 768)
-                    _dfile[n++] = m;
-            }
-        }
-    }
-    else if (end == ".txt" || end == ".asm") {
-        std::ifstream txtFile(filename);
-        if (txtFile.is_open()) {
+    if (sprbin.is_open()) {
+        sprbin >> w;
+        sprbin >> h;
 
-            std::string line;
-            std::regex reg((const char*)"\\$[0-9A-Fa-f]{2}");
-
-            while (getline(txtFile, line)) {
-                for (std::sregex_iterator it = std::sregex_iterator(line.begin(), line.end(), reg); it != std::sregex_iterator(); ++it) {
-                    std::smatch match = *it;
-                    auto mc = match.str().substr(1, 2);
-                    auto m = std::strtol(mc.c_str(), nullptr, 16);
-                    if (m != 0x76 && n < 768) {
-                        _dfile[n++] = m;
-                    }
-                }
-            }
-            txtFile.close();
+        while (!sprbin.eof()) {
+            sprbin >> m;
+            if (n < _w * _h)
+                _dfile[n++] = m;
         }
     }
 }
@@ -151,130 +127,78 @@ void dfile::load(const std::string& filename) {
 
 void dfile::save(const std::string& filename) {
 
-    std::string end = filename.substr(filename.rfind("."));
-
-    if (end == ".asm" || end == ".txt") {
-
-        std::ofstream dfilefile(filename);
-
-        if (dfilefile.is_open())
-        {
-            for (int line = 0; line < 24; ++line) {
-                dfilefile << std::setw(8) << std::setfill('0') << "\t.byte\t$76";
-                for (int x = 0; x < 32; ++x) {
-                    dfilefile << ",$" << std::hex << std::setw(2) << std::setfill('0') << _dfile[x + line * 32];
-                }
-                dfilefile << std::endl;
-            }
-            dfilefile << "\t.byte\t$76";
-            dfilefile.close();
+    std::ofstream sprbin(filename, std::ios::binary);
+    if (sprbin.is_open())
+    {
+        sprbin << (byte)_w;
+        sprbin << (byte)_h;
+        for (int n = 0; n < _w * _h; ++n) {
+            sprbin << (byte)_dfile[n];
         }
+        sprbin.close();
     }
-    else if (end == ".bin" || end == ".raw" || end == ".dfile") {
+}
 
-        // dump of characters only, no newlines
-        std::ofstream dfilefile(filename, std::ios::binary);
 
-        if (dfilefile.is_open())
-        {
-            if (end == ".dfile") {
-                dfilefile << (byte)0x76;
+std::string dfile::serialise() {
+
+    std::stringstream output;
+    std::stringstream comment;
+
+    int bw, bh;
+    getSpriteExtent(bw, bh);
+    if (bw + bh == 0)
+        return "";
+
+    bw = ((bw - 1) / 8) + 1;
+
+    for (int line = 0; line < bh; ++line) {
+        comment.str("");
+        output << "\t.byte\t";
+        for (int c = 0; c < bw; ++c) {
+            byte b = 0;
+            for (int bit = 7; bit >= 0; --bit) {
+                int x = _dfile[c * 8 + (7 - bit) + line * _w];
+                b |= x ? 1 << bit : 0;
+                comment << (x ? "#" : " ");
             }
-            for (int line = 0; line < 24; ++line) {
-                for (int x = 0; x < 32; ++x) {
-                    dfilefile << (byte)_dfile[x + line * 32];
-                }
-                if (end == ".dfile") {
-                    dfilefile << (byte)0x76;
-                }
+
+            output << "$" << std::hex << std::setw(2) << std::setfill('0') << (int)b;
+            if (c != bw - 1) {
+                output << ",";
             }
-            dfilefile.close();
         }
+        output << "\t\t; '" << comment.str() << "'" << std::endl;
+    }
+
+    return output.str();
+}
+
+
+
+void dfile::deserialise(std::string input) {
+
+    std::string line;
+    std::stringstream instr(input);
+    std::regex reg((const char*)"\\$[0-9A-Fa-f]{2}");
+
+    auto lineNum = 0;
+    while (std::getline(instr, line, '\n')) {
+        auto c = 0;
+        for (std::sregex_iterator it = std::sregex_iterator(line.begin(), line.end(), reg); it != std::sregex_iterator(); ++it) {
+            std::smatch match = *it;
+            auto mc = match.str().substr(1, 2);
+            auto m = std::strtol(mc.c_str(), nullptr, 16);
+            for (int bit = 7; bit >= 0; --bit) {
+                _dfile[c * 8 + (7 - bit) + lineNum * _w] = m & (1 << bit) ? 1 : 0;
+            }
+            ++c;
+        }
+
+        ++lineNum;
     }
 }
 
-
-void dfile::cursorUp() {
-    _selStart.y = (_selStart.y + 24 - 1) % 24;
-    _selEnd = _selStart;
-}
-
-void dfile::cursorDown() {
-    _selStart.y = (_selStart.y + 1) % 24;
-    _selEnd = _selStart;
-}
-
-void dfile::cursorRight() {
-    _selStart.x = (_selStart.x + 1) % 32;
-    _selEnd = _selStart;
-}
-
-void dfile::cursorLeft() {
-    _selStart.x = (_selStart.x + 32 - 1) % 32;
-    _selEnd = _selStart;
-}
-
-
-void dfile::insert(bool gMode) {
-
-    auto row = _selStart.y * 32;
-    auto numToShift = 31 - _selStart.x;
-
-    for (int i = 0; i < numToShift; ++i) {
-        _dfile[row + 31 - i] = _dfile[row + 30 - i];
-    }
-
-    _dfile[_selStart.x + row] = gMode ? 128 : 0;
-}
-
-
-void dfile::del(bool gMode) {
-
-    auto row = _selStart.y * 32;
-    auto numToShift = 31 - _selStart.x;
-
-    for (int i = 0; i < numToShift; ++i) {
-        _dfile[row + _selStart.x + i] = _dfile[row + _selStart.x + 1 + i];
-    }
-    _dfile[row + 31] = gMode ? 128 : 0;
-}
-
-
-bool dfile::handleSpecial(int cha) {
-
-    if (8 == cha) {
-        cursorLeft();
-        _dfile[_selStart.x + 32 * _selStart.y] = 0;
-        return true;
-    }
-    return false;
-}
-
-
-void dfile::rst8a(int cha) {
-
-    if (handleSpecial(cha))
-        return;
-
-    auto c = ascii2zeddy(cha);
-    if (c != -1) {
-        _dfile[_selStart.x + 32 * _selStart.y] = c;
-        cursorRight();
-    }
-}
-
-
-void dfile::rst88a(int cha) {
-
-    if (handleSpecial(cha))
-        return;
-
-    auto c = ascii2zeddy(cha);
-    if (c != -1) {
-        _dfile[_selStart.x + 32 * _selStart.y] = c + 128;
-        cursorRight();
-    }
-}
 
 
 copyBuffer dfile::copy() {
@@ -289,7 +213,7 @@ copyBuffer dfile::copy() {
     cb.data.resize(cb.w * cb.h);
     for (int y = 0; y < cb.h; ++y) {
         for (int x = 0; x < cb.w; ++x) {
-            cb.data[x + y * cb.w] = peek(cb.pos.x + x, cb.pos.y + y);
+            cb.data[x + cb.w * y] = _dfile[cb.pos.x + x + (cb.pos.y + y) * _w];
         }
     }
     return cb;
@@ -308,7 +232,7 @@ void dfile::invert() {
     cb.data.resize(cb.w * cb.h);
     for (int y = 0; y < cb.h; ++y) {
         for (int x = 0; x < cb.w; ++x) {
-            _dfile[cb.pos.x + x + (cb.pos.y + y) * 32] = _dfile[cb.pos.x + x + (cb.pos.y + y) * 32] ^ 128;
+            _dfile[cb.pos.x + x + (cb.pos.y + y) * _w] = _dfile[cb.pos.x + x + (cb.pos.y + y) * _w] ^ 1;
         }
     }
 }
@@ -321,8 +245,8 @@ void dfile::paste(copyBuffer& cb) {
 
     auto pos = cb.pos;
 
-    int xc = std::min(cb.w, 32 - pos.x);
-    int yc = std::min(cb.h, 24 - pos.y);
+    int xc = std::min(cb.w, _w - pos.x);
+    int yc = std::min(cb.h, _h - pos.y);
 
     if (pos.x < 0) {
         sxo = -pos.x;
@@ -341,7 +265,7 @@ void dfile::paste(copyBuffer& cb) {
             if (!_opaquePaste && c == 0)
                 continue;
 
-            _dfile[pos.x + x + (pos.y + y) * 32] = c;
+            _dfile[pos.x + x + (pos.y + y) * _w] = c;
         }
 }
 
@@ -355,8 +279,8 @@ void dfile::draw(olc::PixelGameEngine* pge, copyBuffer& cb) {
 
     auto pos = cb.pos;
 
-    int xc = std::min(cb.w, 32 - pos.x);
-    int yc = std::min(cb.h, 24 - pos.y);
+    int xc = std::min(cb.w, _w - pos.x);
+    int yc = std::min(cb.h, _h - pos.y);
 
     if (pos.x < 0) {
         sxo = -pos.x;
@@ -372,15 +296,12 @@ void dfile::draw(olc::PixelGameEngine* pge, copyBuffer& cb) {
     for (int x = 0; x < xc; x++)
         for (int y = 0; y < yc; y++) {
             auto c = cb.data[x + sxo + (syo + y) * cb.w];
-            if (c >= 128) {
-                c -= 64;
-            }
 
             if (!_opaquePaste && c == 0)
                 continue;
 
-            pge->DrawPartialSprite((x + pos.x) * 8 + xo, (y + pos.y) * 8 + yo, _charSet, 0, c * 8, 8, 8);
+            pge->FillRect((pos.x + x) * 4 + xo, (pos.y + y) * 4 + yo, 4, 4, c ? olc::BLACK : olc::WHITE);
         }
 
-    pge->DrawRect(pos.x * 8 + xo, pos.y * 8 + yo, xc * 8, yc * 8, olc::RED);
+    pge->DrawRect(pos.x * 4 + xo, pos.y * 4 + yo, xc * 4 - 1, yc * 4 - 1, olc::RED);
 }

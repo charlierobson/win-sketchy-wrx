@@ -4325,8 +4325,9 @@ namespace olc
 {
 	class Platform_Windows : public olc::Platform
 	{
-	private:
+	public:
 		HWND olc_hWnd = nullptr;
+	private:
 		std::wstring wsAppName;
 
 		std::wstring ConvertS2W(std::string s)

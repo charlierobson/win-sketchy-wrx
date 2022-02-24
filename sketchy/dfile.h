@@ -15,26 +15,23 @@ class dfile
 private:
 	std::vector<int> _dfile;
 
-	void doPlot(int, int, int);
-	bool handleSpecial(int cha);
-
 	olc::vi2d _selStart;
 	olc::vi2d _selEnd;
 
 	olc::Sprite* _charSet;
 	bool _opaquePaste;
 
+	int _w, _h;
+
 public:
-	dfile(olc::Sprite* charSet);
+	dfile(olc::Sprite*, int, int);
+	dfile(const dfile& other);
 
 	olc::Sprite* charSet() { return _charSet; }
 
 	void draw(olc::PixelGameEngine*);
 
 	void cls();
-		
-	void poke(int x, int y, int c);
-	int peek(int x, int y);
 
 	void plot(int x, int y);
 	void unplot(int x, int y);
@@ -56,6 +53,14 @@ public:
 		end.y = std::max(_selStart.y, _selEnd.y);
 	}
 
+	int getW() {
+		return _w;
+	}
+
+	int getH() {
+		return _h;
+	}
+
 	static int ascii2zeddy(int c);
 
 	void fill(int c);
@@ -63,15 +68,7 @@ public:
 	void load(const std::string& filename);
 	void save(const std::string& filename);
 
-	void cursorRight();
-	void cursorDown();
-	void cursorUp();
-	void cursorLeft();
-	void insert(bool);
-	void del(bool);
-
-	void rst8a(int);
-	void rst88a(int);
+	std::string serialise();
 
 	copyBuffer copy();
 	void invert();
@@ -79,6 +76,30 @@ public:
 	void paste(copyBuffer&);
 	void draw(olc::PixelGameEngine* pge, copyBuffer& cb);
 
-	bool getOpaquePaste() { return _opaquePaste; }
-	void setOpaquePaste(bool opaquePaste) { _opaquePaste = opaquePaste; }
+	bool getOpaquePaste() {
+		return _opaquePaste;
+	}
+
+	void setOpaquePaste(bool opaquePaste) {
+		_opaquePaste = opaquePaste;
+	}
+
+	void getSpriteExtent(int& pixW, int& pixH) {
+		pixW = 0;
+		pixH = 0;
+		for (int row = 0; row < _h; ++row) {
+			for (int col = _w - 1; col >= 0; --col) {
+				if (_dfile[col + _w * row]) {
+					if (col + 1 > pixW) {
+						pixW = col + 1;
+					}
+					pixH = row + 1;
+					break;
+				}
+			}
+		}
+		return;
+	}
+
+	void deserialise(std::string);
 };

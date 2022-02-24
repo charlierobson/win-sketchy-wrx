@@ -9,7 +9,12 @@ protected:
 	bool _wasWithin = false;
 
 public:
-	region() {}
+	region() {
+		_topLeft.x = 2000;
+		_topLeft.y = 2000;
+		_bottomRight.x = 0;
+		_bottomRight.y = 0;
+	}
 
 	region(int tlx, int tly, int brx, int bry) {
 		_topLeft.x = tlx;
