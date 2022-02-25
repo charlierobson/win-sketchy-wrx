@@ -11,7 +11,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="sketchy.cpp">
+    <ClCompile Include="sketchy-wrx.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="buttons.cpp">
@@ -38,9 +38,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="sketchyIf.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="resource.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="sinv.h">
